@@ -30,6 +30,9 @@ import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 warnings.filterwarnings("ignore")
 
+# FIX FOR OPENCV DOCKER ERROR: Install missing libGL library automatically
+os.system("apt-get update -y && apt-get install -y libgl1")
+
 import copy
 import csv as csv_mod
 import glob
