@@ -41,6 +41,8 @@ import sys
 import threading
 import time
 import urllib.request
+import zipfile
+import tarfile
 
 import torch
 import yaml
@@ -58,7 +60,7 @@ CLEARML_OUTPUT_URI = "s3://api.blackhole2.ai.innopolis.university:443/lukmanov-t
 # --- Data (MinIO S3 Archives) -----------------------------------------------
 DATA_S3_LONG = "s3://api.blackhole2.ai.innopolis.university:443/lukmanov-team/Hyper-Kvasir Long.zip"
 DATA_S3_SHORT = "s3://api.blackhole2.ai.innopolis.university:443/lukmanov-team/Hyper-Kvasir Short.tar"
-LOCAL_DATA_DIR = None  
+LOCAL_DATA_DIR = None 
 
 VIDEO_EXTS = (".mp4", ".avi", ".mov", ".mkv", ".webm", ".mpg", ".mpeg", ".m4v", ".wmv")
 FRAME_EXTS = (".jpg", ".jpeg", ".png", ".bmp")
@@ -73,18 +75,18 @@ MIN_SEQ_FRAMES = 16              # folders with fewer ordered frames are skipped
 # it is > 0.
 FRAME_SEQ_FPS = 25
 
-# --- Checkpoint --------------------------------------------------------------
-# Local .pt/.pth path, s3:// path, or https URL of the released 2.1 ViT-L file.
-CKPT_SOURCE = "https://dl.fbaipublicfiles.com/vjepa2/vjepa2_1_vitl_dist_vitG_384.pt"  # EDIT ME if you have it locally
+# --- Checkpoint (From MinIO) -------------------------------------------------
+# We set this to pull directly from your secure Blackhole2 bucket
+CKPT_SOURCE = "s3://api.blackhole2.ai.innopolis.university:443/lukmanov-team/vjepa2_1_vitl_dist_vitG_384.pt"
 
 # --- Repo / run folders -------------------------------------------------------
 VJEPA2_REPO_DIR = os.path.abspath("./vjepa2")
 RUN_DIR = os.path.abspath("./vjepa21_endo_run")   # checkpoints + logs + generated config land here
 
-# --- Training (single 40GB GPU defaults) -------------------------------------
+# --- Training (single 80GB GPU defaults) -------------------------------------
 DEVICES = ["cuda:0"]   # add "cuda:1", ... to launch the repo's multi-process mode
 BATCH_SIZE = 24        # per GPU; bf16 + activation checkpointing, ~fits 40GB. Try 16-20 if memory allows.
-NUM_WORKERS = 24
+NUM_WORKERS = 24       # Fast loading on your 48-core CPU
 EPOCHS = 10
 IPE = 300              # iterations per "epoch"; loader is refreshed when exhausted,
                        # so this can exceed len(dataset)/batch and decouples
@@ -532,15 +534,33 @@ def start_log_tailer(run_dir):
 def main():
     ensure_repo(VJEPA2_REPO_DIR)
 
-    # -- data
+    # -- data extraction (Downloads and unzips BOTH archives into one folder)
     if LOCAL_DATA_DIR:
         data_root = LOCAL_DATA_DIR
     else:
         from clearml import StorageManager
+        import zipfile
+        import tarfile
 
-        print(f"[data] downloading and extracting {DATA_S3_ARCHIVE}")
-        data_root = StorageManager.get_local_copy(DATA_S3_ARCHIVE)
-    print(f"[data] data root: {data_root}")
+        data_root = os.path.abspath("./extracted_videos")
+        os.makedirs(data_root, exist_ok=True)
+        
+        # 1. Download & Extract Long Videos ZIP
+        print(f"[data] downloading {DATA_S3_LONG}...")
+        long_zip = StorageManager.get_local_copy(DATA_S3_LONG, extract_archive=False)
+        print("[data] extracting Long videos...")
+        with zipfile.ZipFile(long_zip, 'r') as z:
+            z.extractall(data_root)
+            
+        # 2. Download & Extract Short Videos TAR
+        print(f"[data] downloading {DATA_S3_SHORT}...")
+        short_tar = StorageManager.get_local_copy(DATA_S3_SHORT, extract_archive=False)
+        print("[data] extracting Short videos...")
+        with tarfile.open(short_tar, 'r') as t:
+            t.extractall(data_root)
+            
+        print(f"[data] Extraction complete! All videos ready in: {data_root}")
+
     csv_path = prepare_data(data_root, RUN_DIR)
 
     # -- checkpoint
