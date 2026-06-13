@@ -1,0 +1,27 @@
+# V-JEPA 2.1 endoscopic domain pretraining - runtime requirements
+# Tested layout: Python 3.10, CUDA torch (your existing 2.1.2 stack works; anything torch>=2 is fine)
+
+torch>=2.0
+torchvision
+
+# vjepa2 repo dependencies on the pretraining execution path
+timm
+einops
+numpy
+pandas
+opencv-python
+pyyaml
+pillow
+psutil
+
+# video decoding (the repo reads videos through decord)
+# NOTE: if the decord wheel is missing for your Python build, use
+# "eva-decord" instead (drop-in replacement, same "decord" import).
+decord==0.6.0
+
+# frame-sequence -> mp4 conversion fallback when system ffmpeg is absent
+imageio-ffmpeg
+
+# experiment tracking + MinIO access
+clearml
+boto3
